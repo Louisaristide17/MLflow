@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLflow — Garder la trace de chaque expérience</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1720;
+    --panel:#16212C;
+    --panel-2:#1C2A37;
+    --line:#2A3A48;
+    --ink:#EAF0F5;
+    --ink-soft:#93A5B4;
+    --teal:#2FD3C4;
+    --amber:#F2A93B;
+    --coral:#F0654A;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Inter', sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important;} }
+
+  h1,h2,h3{font-family:'Space Grotesk', sans-serif; font-weight:600; margin:0; letter-spacing:-0.01em;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+  a{color:inherit;}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 28px;}
+
+  /* ---------- NAV ---------- */
+  nav{position:sticky; top:0; z-index:50; background:rgba(15,23,32,0.9); backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:60px;}
+  .brand{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:17px; display:flex; align-items:center; gap:8px;}
+  .brand .sq{width:10px; height:10px; background:var(--teal); border-radius:2px; display:inline-block;}
+  nav ul{list-style:none; display:none; gap:24px; margin:0; padding:0; font-size:13.5px;}
+  @media(min-width:760px){ nav ul{display:flex;} }
+  nav a{text-decoration:none; color:var(--ink-soft);}
+  nav a:hover{color:var(--ink);}
+
+  /* ---------- HERO ---------- */
+  header.hero{padding:80px 0 56px;}
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace; font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--teal); margin-bottom:16px; display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{content:"●"; font-size:8px;}
+  h1.title{font-size:clamp(34px,5.4vw,58px); line-height:1.05; max-width:820px;}
+  h1.title span{color:var(--teal);}
+  .lede{max-width:600px; margin-top:20px; font-size:17px; line-height:1.65; color:var(--ink-soft);}
+
+  /* ---------- RUN LOG (signature element) ---------- */
+  .runlog{
+    margin-top:48px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--panel); overflow:hidden;
+  }
+  .runlog-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--line); background:var(--panel-2);
+  }
+  .runlog-head span{font-family:'JetBrains Mono', monospace; font-size:12.5px; color:var(--ink-soft);}
+  .runlog table{width:100%; border-collapse:collapse;}
+  .runlog th{
+    font-family:'JetBrains Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--ink-soft); text-align:left; padding:10px 18px; border-bottom:1px solid var(--line);
+  }
+  .runlog td{padding:12px 18px; font-size:13.5px; border-bottom:1px solid var(--line);}
+  .runlog tr:last-child td{border-bottom:none;}
+  .runlog td.run-id{font-family:'JetBrains Mono', monospace; color:var(--ink-soft);}
+  .pill{font-family:'JetBrains Mono', monospace; font-size:11.5px; padding:3px 9px; border-radius:999px; font-weight:600;}
+  .pill.best{background:rgba(47,211,196,0.15); color:var(--teal);}
+  .pill.ok{background:rgba(242,169,59,0.15); color:var(--amber);}
+  .pill.low{background:rgba(240,101,74,0.15); color:var(--coral);}
+  .bar{height:5px; background:var(--line); border-radius:3px; overflow:hidden; width:80px; display:inline-block; vertical-align:middle; margin-right:8px;}
+  .bar i{display:block; height:100%; background:var(--teal); border-radius:3px;}
+
+  /* ---------- SECTION SCAFFOLD ---------- */
+  section{padding:64px 0; border-top:1px solid var(--line);}
+  .section-head{max-width:620px; margin-bottom:38px;}
+  .section-head .num{font-family:'JetBrains Mono', monospace; font-size:12.5px; color:var(--teal); display:block; margin-bottom:10px;}
+  .section-head h2{font-size:clamp(26px,3.2vw,34px);}
+  .section-head p{color:var(--ink-soft); font-size:15.5px; margin-top:12px; line-height:1.6;}
+
+  /* ---------- DEFINITION ---------- */
+  .def-grid{display:grid; grid-template-columns:1fr; gap:16px;}
+  @media(min-width:760px){ .def-grid{grid-template-columns:1.3fr 1fr;} }
+  .def-text{color:var(--ink-soft); font-size:15.5px; line-height:1.75;}
+  .def-text strong{color:var(--ink); font-weight:600;}
+  .fact-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px;}
+  .fact-card .k{font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;}
+  .fact-card .v{font-size:14.5px; line-height:1.6;}
+  .fact-card + .fact-card{margin-top:12px;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .chip{font-family:'JetBrains Mono', monospace; font-size:12px; background:var(--panel-2); border:1px solid var(--line); padding:5px 10px; border-radius:8px; color:var(--ink-soft);}
+
+  /* ---------- USE LIST ---------- */
+  .use-list{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media(min-width:640px){ .use-list{grid-template-columns:1fr 1fr;} }
+  .use-item{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px;
+    display:flex; gap:14px; align-items:flex-start;
+  }
+  .use-item .ico{color:var(--teal); font-family:'JetBrains Mono', monospace; font-weight:700; font-size:14px;}
+  .use-item p{margin:0; font-size:14.5px; color:var(--ink-soft); line-height:1.55;}
+  .audience-row{display:grid; grid-template-columns:1fr; gap:14px; margin-top:22px;}
+  @media(min-width:640px){ .audience-row{grid-template-columns:1fr 1fr;} }
+  .audience-card{border-left:3px solid var(--teal); background:var(--panel); border-radius:0 var(--radius) var(--radius) 0; padding:16px 20px;}
+  .audience-card h4{font-family:'Space Grotesk',sans-serif; font-size:14.5px; margin-bottom:6px; color:var(--ink);}
+  .audience-card p{margin:0; font-size:14px; color:var(--ink-soft); line-height:1.55;}
+
+  /* ---------- MODULES (comment ça marche) ---------- */
+  .modules{display:grid; grid-template-columns:1fr; gap:2px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
+  @media(min-width:760px){ .modules{grid-template-columns:repeat(4,1fr);} }
+  .module{background:var(--panel); padding:22px 20px;}
+  .module .idx{font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--teal); display:block; margin-bottom:10px;}
+  .module h4{font-size:15.5px; font-family:'Space Grotesk',sans-serif; margin-bottom:8px;}
+  .module p{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0;}
+
+  .flow{
+    margin-top:24px; display:flex; flex-wrap:wrap; gap:0; align-items:center;
+    font-family:'JetBrains Mono', monospace; font-size:13px;
+  }
+  .flow .step{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 14px; color:var(--ink-soft);}
+  .flow .arrow{padding:0 10px; color:var(--teal);}
+
+  /* ---------- COMPARISON ---------- */
+  .compare{display:grid; grid-template-columns:1fr; gap:2px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;}
+  .compare-row{display:grid; grid-template-columns:130px 1fr; background:var(--panel);}
+  @media(min-width:600px){ .compare-row{grid-template-columns:160px 1fr;} }
+  .compare-row .vs{padding:18px 20px; font-family:'JetBrains Mono', monospace; font-weight:700; font-size:14px; background:var(--panel-2); display:flex; align-items:center;}
+  .compare-row .vs .against{color:var(--ink-soft); font-weight:500; font-size:12px; display:block; margin-top:4px;}
+  .compare-row .txt{padding:18px 20px; font-size:14.5px; color:var(--ink-soft); line-height:1.6; display:flex; align-items:center;}
+  .compare-row .txt strong{color:var(--ink); font-weight:600;}
+
+  /* ---------- CASES ---------- */
+  .cases{display:grid; grid-template-columns:1fr; gap:16px;}
+  @media(min-width:760px){ .cases{grid-template-columns:1fr 1fr;} }
+  .case-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px;}
+  .case-card .sector{font-family:'JetBrains Mono', monospace; font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--amber); display:block; margin-bottom:10px;}
+  .case-card p{margin:0; font-size:14.5px; color:var(--ink-soft); line-height:1.6;}
+
+  /* ---------- VERDICT ---------- */
+  .verdict{border:1px solid var(--line); border-radius:var(--radius); background:linear-gradient(180deg, var(--panel), var(--panel-2)); padding:38px;}
+  .verdict p.signature{font-family:'Space Grotesk',sans-serif; font-size:clamp(20px,2.6vw,27px); line-height:1.4; max-width:800px; color:var(--ink);}
+  .verdict p.signature span{color:var(--teal);}
+
+  footer{padding:36px 0 54px; border-top:1px solid var(--line); color:var(--ink-soft); font-size:13px;}
+  footer .wrap{display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand"><span class="sq"></span>MLflow — décrypté</div>
+    <ul>
+      <li><a href="#definition">Définition</a></li>
+      <li><a href="#usages">À quoi ça sert</a></li>
+      <li><a href="#fonctionnement">Fonctionnement</a></li>
+      <li><a href="#comparaison">Comparaison</a></li>
+      <li><a href="#cas">Cas d'usage</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Cycle de vie du machine learning</div>
+    <h1 class="title">Chaque essai de modèle mérite d'être <span>retrouvable</span></h1>
+    <p class="lede">MLflow enregistre les paramètres, les résultats et les fichiers de chaque expérience de machine learning — pour qu'une équipe puisse comparer ses essais, reproduire le meilleur, et le déployer sans tout reconstruire à la main.</p>
+
+    <div class="runlog">
+      <div class="runlog-head">
+        <span>experiments / detection-fraude</span>
+        <span>4 runs</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Run</th><th>Modèle</th><th>Accuracy</th><th>Statut</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="run-id">#a3f0e1</td><td>RandomForest</td>
+            <td><span class="bar"><i style="width:92%"></i></span>0.92</td>
+            <td><span class="pill best">retenu</span></td>
+          </tr>
+          <tr>
+            <td class="run-id">#c19b02</td><td>XGBoost</td>
+            <td><span class="bar"><i style="width:89%"></i></span>0.89</td>
+            <td><span class="pill ok">archivé</span></td>
+          </tr>
+          <tr>
+            <td class="run-id">#7e2d4a</td><td>LogisticRegression</td>
+            <td><span class="bar"><i style="width:81%"></i></span>0.81</td>
+            <td><span class="pill ok">archivé</span></td>
+          </tr>
+          <tr>
+            <td class="run-id">#f0019c</td><td>SVM</td>
+            <td><span class="bar"><i style="width:74%"></i></span>0.74</td>
+            <td><span class="pill low">rejeté</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</header>
+
+<section id="definition">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="num">01 — Définition</span>
+      <h2>Qu'est-ce que MLflow ?</h2>
+    </div>
+    <div class="def-grid">
+      <div class="def-text">
+        <p>MLflow est une <strong>plateforme open source de gestion du cycle de vie des projets de machine learning</strong>. Elle aide les équipes à structurer leurs travaux, du développement jusqu'au déploiement des modèles.</p>
+        <p>Elle a été créée par <strong>Databricks</strong>, une entreprise spécialisée dans les technologies de données. Elle est compatible avec la plupart des bibliothèques de machine learning et utilisée par les ingénieurs, scientifiques de données et développeurs pour suivre leurs expériences, gérer leurs modèles et automatiser leur mise en production.</p>
+      </div>
+      <div>
+        <div class="fact-card">
+          <span class="k">Créateur</span>
+          <div class="v">Databricks</div>
+        </div>
+        <div class="fact-card">
+          <span class="k">Compatible avec</span>
+          <div class="chip-row">
+            <span class="chip">TensorFlow</span>
+            <span class="chip">PyTorch</span>
+            <span class="chip">scikit-learn</span>
+          </div>
+        </div>
+        <div class="fact-card">
+          <span class="k">Utilisé par</span>
+          <div class="v">Ingénieurs, data scientists, développeurs</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="usages">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="num">02 — Usages</span>
+      <h2>À quoi sert MLflow</h2>
+      <p>Il centralise les informations d'un projet ML pour les rendre accessibles et comparables.</p>
+    </div>
+    <div class="use-list">
+      <div class="use-item"><span class="ico">01</span><p>Suivre les différentes versions d'un modèle au fil des essais</p></div>
+      <div class="use-item"><span class="ico">02</span><p>Comparer les performances de plusieurs expériences</p></div>
+      <div class="use-item"><span class="ico">03</span><p>Stocker les paramètres d'entraînement et les jeux de données utilisés</p></div>
+      <div class="use-item"><span class="ico">04</span><p>Enregistrer et déployer facilement les modèles entraînés</p></div>
+    </div>
+    <div class="audience-row">
+      <div class="audience-card">
+        <h4>Pour un responsable technique</h4>
+        <p>Une meilleure visibilité sur l'état des projets en cours.</p>
+      </div>
+      <div class="audience-card">
+        <h4>Pour un recruteur ou un dirigeant</h4>
+        <p>L'assurance d'une certaine rigueur dans le développement des modèles IA.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="fonctionnement">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="num">03 — Fonctionnement</span>
+      <h2>Comment fonctionne MLflow</h2>
+      <p>Quatre modules indépendants, utilisables séparément ou ensemble.</p>
+    </div>
+    <div class="modules">
+      <div class="module">
+        <span class="idx">Tracking</span>
+        <h4>MLflow Tracking</h4>
+        <p>Enregistrer et visualiser les résultats d'expériences.</p>
+      </div>
+      <div class="module">
+        <span class="idx">Projects</span>
+        <h4>MLflow Projects</h4>
+        <p>Structurer les projets avec des fichiers standardisés.</p>
+      </div>
+      <div class="module">
+        <span class="idx">Models</span>
+        <h4>MLflow Models</h4>
+        <p>Gérer les modèles entraînés et les rendre portables.</p>
+      </div>
+      <div class="module">
+        <span class="idx">Registry</span>
+        <h4>MLflow Registry</h4>
+        <p>Stocker et versionner les modèles validés.</p>
+      </div>
+    </div>
+
+    <div class="flow">
+      <span class="step">Lancer une expérience</span><span class="arrow">→</span>
+      <span class="step">Enregistrer paramètres, métriques, artefacts</span><span class="arrow">→</span>
+      <span class="step">Visualiser (UI web ou API)</span>
+    </div>
+    <p style="color:var(--ink-soft); font-size:14.5px; margin-top:20px; max-width:640px; line-height:1.6;">
+      MLflow s'installe localement ou sur un serveur, et s'intègre dans des scripts Python ou des plateformes cloud.
+    </p>
+  </div>
+</section>
+
+<section id="comparaison">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="num">04 — Distinctions</span>
+      <h2>MLflow n'est pas ses voisins</h2>
+      <p>Trois outils souvent confondus, trois rôles différents — et complémentaires.</p>
+    </div>
+    <div class="compare">
+      <div class="compare-row">
+        <div class="vs">MLflow<span class="against">vs Airflow</span></div>
+        <div class="txt">Airflow sert à <strong>automatiser des tâches</strong>. MLflow gère les <strong>expériences IA</strong>.</div>
+      </div>
+      <div class="compare-row">
+        <div class="vs">MLflow<span class="against">vs DVC</span></div>
+        <div class="txt">DVC suit les <strong>données et les fichiers</strong>. MLflow suit les <strong>expériences et les modèles</strong>.</div>
+      </div>
+      <div class="compare-row">
+        <div class="vs">MLflow<span class="against">vs Kubeflow</span></div>
+        <div class="txt">Kubeflow est plus complexe, pour des <strong>déploiements sur Kubernetes</strong>. MLflow est plus <strong>léger et modulaire</strong>.</div>
+      </div>
+    </div>
+    <p style="color:var(--ink-soft); font-size:14.5px; margin-top:18px;">Ces outils peuvent être complémentaires : MLflow se concentre sur le suivi pratique des modèles, sans imposer d'infrastructure complexe.</p>
+  </div>
+</section>
+
+<section id="cas">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="num">05 — Cas d'usage</span>
+      <h2>Sur le terrain</h2>
+    </div>
+    <div class="cases">
+      <div class="case-card">
+        <span class="sector">Banque</span>
+        <p>Une équipe data entraîne différents modèles de détection de fraude. MLflow leur permet d'enregistrer chaque version, d'évaluer les performances, puis de retenir celle qui donne les meilleurs résultats.</p>
+      </div>
+      <div class="case-card">
+        <span class="sector">E-commerce</span>
+        <p>Une start-up gère ses algorithmes de recommandation. Chaque jour, plusieurs modèles sont testés avec des données récentes. MLflow facilite la comparaison et la mise à jour rapide d'un modèle performant.</p>
+      </div>
+      <div class="case-card">
+        <span class="sector">Études</span>
+        <p>Un étudiant en data science utilise MLflow pour documenter ses essais dans le cadre d'un projet de fin d'études, et prouver sa rigueur technique à un recruteur ou pour une certification.</p>
+      </div>
+      <div class="case-card">
+        <span class="sector">RH</span>
+        <p>Un ingénieur IA développe un modèle de tri de CV. MLflow permet de garder un historique clair des versions testées et de s'assurer que le modèle est bien auditable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="verdict">
+  <div class="wrap">
+    <div class="verdict">
+      <p class="signature">MLflow n'impose pas une manière de faire du machine learning — il garde simplement <span>la mémoire de chaque essai</span>, pour que la meilleure version ne se perde jamais entre le notebook et la production.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>MLflow — décrypté</span>
+    <span class="mono">Tracking · Projects · Models · Registry</span>
+  </div>
+</footer>
+
+</body>
+</html>
